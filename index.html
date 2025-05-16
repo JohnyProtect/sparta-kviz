@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <title>Kvíz trenéři Sparty</title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      background-color: #670000;
+      color: white;
+      margin: 40px;
+    }
+    h1 {
+      color: #ffcc00;
+    }
+    .correct {
+      color: #00ff00;
+    }
+    .missed {
+      color: #ff6666;
+    }
+    input[type="text"] {
+      padding: 10px;
+      font-size: 16px;
+      width: 300px;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      margin: 10px 5px;
+      background-color: #ffcc00;
+      color: black;
+      border: none;
+      cursor: pointer;
+    }
+    ul {
+      list-style: none;
+      padding: 0;
+    }
+    li {
+      margin: 5px 0;
+    }
+    #status {
+      margin-top: 20px;
+      font-weight: bold;
+    }
+    #highScores {
+      margin-top: 30px;
+    }
+    #highScores h2 {
+      color: #ffcc00;
+    }
+  </style>
+</head>
+<body>
+  <h1>Kvíz: Trenéři AC Sparta Praha (éra Daniela Křetínského)</h1>
+  <p>Napiš příjmení nebo celé jméno trenéra. Diakritika není povinná.</p>
+  <button id="startBtn">Start</button>
+  <button id="restartBtn">Restart</button>
+  <button id="giveUpBtn">Vzdát se</button>
+  <br>
+  <input type="text" id="answerInput" placeholder="Zadej trenéra..." disabled>
+  <ul id="correctAnswers"></ul>
+  <div id="status"></div>
+
+  <div id="playerNameInput" style="margin-top:20px; display:none;">
+    <label for="playerName">Zadej své jméno:</label>
+    <input type="text" id="playerName" placeholder="Tvé jméno">
+    <button onclick="submitScore()">Uložit výsledek</button>
+  </div>
+
+  <div id="highScores">
+    <h2>Nejlepší časy</h2>
+    <ol id="scoreList"></ol>
+  </div>
+
+  <script>
+    const trainersList = [
+      "Luboš Loučka", "Jozef Chovanec", "Martin Hašek", "David Holoubek", "Petr Rada",
+      "Michal Horňák", "František Straka", "Jaroslav Hřebík", "Stanislav Griga", "Michal Bílek",
+      "Vítězslav Lavička", "Zdeněk Ščasný", "Andrea Stramaccioni", "Pavel Hapal", "Václav Jílek",
+      "Václav Kotal", "Pavel Vrba", "Brian Priske", "Lars Friis"
+    ];
+
+    function normalize(str) {
+      return str.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+    }
+
+    const trainers = {};
+    trainersList.forEach(name => {
+      const normName = normalize(name);
+      trainers[normName] = name;
+      const [first, last] = name.split(" ");
+      trainers[normalize(last)] = name;
+      trainers[normalize(first + " " + last)] = name;
+    });
+
+    let total = new Set(Object.values(trainers)).size;
+    const found = new Set();
+    const input = document.getElementById("answerInput");
+    const list = document.getElementById("correctAnswers");
+    const status = document.getElementById("status");
+    const startBtn = document.getElementById("startBtn");
+    const restartBtn = document.getElementById("restartBtn");
+    const giveUpBtn = document.getElementById("giveUpBtn");
+    const scoreList = document.getElementById("scoreList");
+    const playerNameDiv = document.getElementById("playerNameInput");
+    const playerNameInput = document.getElementById("playerName");
+
+    let timer;
+    let seconds = 0;
+    let gameActive = false;
+    let completedTime = 0;
+
+    function updateStatus() {
+      status.textContent = `Zbývá trenérů: ${total - found.size} | Čas: ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+    }
+
+    function saveHighScore(timeSeconds, name) {
+      if (!Number.isFinite(timeSeconds) || timeSeconds <= 0) return;
+      const scores = JSON.parse(localStorage.getItem("spartaHighScores") || "[]");
+      scores.push({ name: name || "Anonym", time: timeSeconds });
+      scores.sort((a, b) => a.time - b.time);
+      if (scores.length > 5) scores.length = 5;
+      localStorage.setItem("spartaHighScores", JSON.stringify(scores));
+      renderHighScores();
+    }
+
+    function submitScore() {
+      const name = playerNameInput.value.trim() || "Anonym";
+      saveHighScore(completedTime, name);
+      playerNameDiv.style.display = "none";
+    }
+
+    function renderHighScores() {
+      const scores = JSON.parse(localStorage.getItem("spartaHighScores") || "[]");
+      scoreList.innerHTML = "";
+      scores.forEach(entry => {
+        if (entry.name && Number.isFinite(entry.time)) {
+          const li = document.createElement("li");
+          li.textContent = `${entry.name}: ${Math.floor(entry.time / 60)}:${String(entry.time % 60).padStart(2, '0')}`;
+          scoreList.appendChild(li);
+        }
+      });
+    }
+
+    function startGame() {
+      gameActive = true;
+      input.disabled = false;
+      input.focus();
+      startBtn.disabled = true;
+      restartBtn.disabled = false;
+      giveUpBtn.disabled = false;
+      timer = setInterval(() => {
+        seconds++;
+        updateStatus();
+      }, 1000);
+    }
+
+    function resetGame() {
+      clearInterval(timer);
+      seconds = 0;
+      found.clear();
+      list.innerHTML = "";
+      input.value = "";
+      input.disabled = true;
+      startBtn.disabled = false;
+      restartBtn.disabled = true;
+      giveUpBtn.disabled = true;
+      playerNameDiv.style.display = "none";
+      updateStatus();
+      status.textContent = "Kvíz byl restartován. Klikni na Start.";
+    }
+
+    function giveUp() {
+      clearInterval(timer);
+      gameActive = false;
+      input.disabled = true;
+      trainersList.forEach(name => {
+        if (!found.has(name)) {
+          const li = document.createElement("li");
+          li.textContent = name;
+          li.className = "missed";
+          list.appendChild(li);
+        }
+      });
+      status.textContent = `Vzdal(a) ses. Uhodl(a) jsi ${found.size} z ${total} trenérů.`;
+    }
+
+    input.addEventListener("input", () => {
+      if (!gameActive) return;
+      const val = normalize(input.value.trim());
+      if (trainers[val] && !found.has(trainers[val])) {
+        found.add(trainers[val]);
+        const li = document.createElement("li");
+        li.textContent = trainers[val];
+        li.className = "correct";
+        list.appendChild(li);
+        input.value = "";
+        updateStatus();
+
+        if (found.size === total) {
+          clearInterval(timer);
+          completedTime = seconds;
+          status.textContent = `Gratulujeme! Uhodl(a) jste všechny trenéry za ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}.`;
+          input.disabled = true;
+          gameActive = false;
+          playerNameDiv.style.display = "block";
+        }
+      }
+    });
+
+    startBtn.addEventListener("click", startGame);
+    restartBtn.addEventListener("click", resetGame);
+    giveUpBtn.addEventListener("click", giveUp);
+
+    renderHighScores();
+    resetGame();
+  </script>
+</body>
+</html>
